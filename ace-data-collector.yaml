@@ -1,0 +1,200 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+labels:
+  acecol: ace-cp4i-data-collector
+metadata:
+  name: ace-data-collector
+  annotations:
+    openshift.io/display-name: ACE Data Collector Application
+    description: The ACE Data collector application is used to get service trace from ACE application deployed on CP4I
+    tags: ace,cp4i,openshift
+objects:
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    name: ${ACE_DC_APP}
+    namespace: ${NAMESPACE}
+  spec:
+    lookupPolicy:
+      local: false
+    tags:
+    - annotations: null
+      from:
+        kind: DockerImage
+        name: ${ACE_DATA_COL_IMAGE}
+      importPolicy: {}
+      name: latest
+      referencePolicy:
+        type: Local
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: ${ACE_DC_APP}
+    namespace: ${NAMESPACE}
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: edit
+  subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: ${NAMESPACE}
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    name: ${ACE_DC_APP}
+    namespace: ${NAMESPACE}
+  spec:
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      deploymentconfig: ${ACE_DC_APP}
+    strategy:
+      activeDeadlineSeconds: 21600
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          acecol: ace-cp4i-data-collector
+          deploymentconfig: ${ACE_DC_APP}
+      spec:
+        securityContext:
+          runAsUser: 1000640000
+          runAsGroup: 3000
+          readOnlyRootFilesystem: true  
+          runAsNonRoot: true
+        containers:
+        - env:
+          - name: ACE_INTEGRATION_SERVER
+            value: ${ACE_INTEGRATION_SERVER}
+          - name: API_SERVER
+            value: ${API_SERVER}
+          - name: NAMESPACE
+            value: ${NAMESPACE}
+          - name: OCP_PASSWORD
+            value: ${OCP_PASSWORD}
+          - name: OCP_USER
+            value: ${OCP_USER}
+          - name: TRACE_PERIOD
+            value: ${TRACE_PERIOD}
+          - name: TRACE 
+            value: ${TRACE}   
+          - name: USER_TRACE 
+            value: ${USER_TRACE}   
+          - name: STATS 
+            value: ${STATS}               
+          - name: STATS_PERIOD
+            value: ${STATS_PERIOD}
+          - name: USER_TRACE_PERIOD
+            value: ${USER_TRACE_PERIOD}
+          - name: ENABLE_MUSTGATHER
+            value: ${ENABLE_MUSTGATHER}
+          - name: DISABLE_TRACE
+            value: ${DISABLE_TRACE}
+          - name: DISABLE_USER_TRACE
+            value: ${DISABLE_USER_TRACE}
+          - name: DISABLE_ACC_STATS
+            value: ${DISABLE_ACC_STATS}            
+          imagePullPolicy: Always
+          name: ${ACE_DC_APP}
+          securityContext:
+            allowPrivilegeEscalation: false
+          volumeMounts:
+          - name: temp-storage
+            mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: "128Mi"
+            limits:
+              cpu: 50m
+              memory: "256Mi"
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        volumes:
+        - name: temp-storage
+          emptyDir: {}
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        terminationGracePeriodSeconds: 30
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - ${ACE_DC_APP}
+        from:
+          kind: ImageStreamTag
+          name: ${ACE_DC_APP}:latest
+      type: ImageChange
+parameters:
+- displayName: Name of the ace data-collector application
+  name: ACE_DC_APP
+  value: acecol
+- displayName: ACE Integration server name
+  name: ACE_INTEGRATION_SERVER
+  required: true
+- displayName: OpenShift API Server URL
+  name: API_SERVER
+  required: true
+- displayName: Target namespace where ACE application is deployed
+  name: NAMESPACE
+  required: true
+- name: OCP_PASSWORD
+  required: false
+- displayName: Openshift Username
+  name: OCP_USER
+  required: false
+- displayName: Service Trace Enabled?
+  name: TRACE
+  value: "0"
+  required: true
+- displayName: User Trace Enabled?
+  name: USER_TRACE
+  value: "0"
+  required: true
+- displayName: Stats & Accounting Enabled?
+  name: STATS
+  value: "0"
+  required: true  
+- displayName: Time period in seconds for which service trace will be kept enabled
+  name: TRACE_PERIOD
+  value: "0"
+  required: true
+- displayName: Time period in seconds for which accounting stats will be kept enabled
+  name: STATS_PERIOD
+  value: "0"
+  required: true
+- displayName: Time period in seconds for which user trace will be kept enabled
+  name: USER_TRACE_PERIOD
+  value: "0"
+  required: true
+- displayName: Collect Mustgather and existing traces
+  name: ENABLE_MUSTGATHER 
+  value: "0"
+  required: true
+- displayName: Disable service trace
+  name: DISABLE_TRACE 
+  value: "0"
+  required: true
+- displayName: Disable user trace
+  name: DISABLE_USER_TRACE 
+  value: "0"
+  required: true
+- displayName: Disable Accounting and Statistics
+  name: DISABLE_ACC_STATS 
+  value: "0"
+  required: true  
+- displayName: ACE DataCollector image
+  name: ACE_DATA_COL_IMAGE
+  required: true
+  value: icr.io/appc-dev/ace-data-collector
